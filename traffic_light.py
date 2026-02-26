@@ -10,6 +10,7 @@
 
 from gpiozero import LED, Button # type: ignore # Standard GPIO input and output
 import asyncio as asy # For asynchronous functions
+import time
 
 class TrafficLight: # Main Traffic Light code
     def __init__(self) -> None: # Inital code once function is called in TrafficLight
@@ -22,15 +23,31 @@ class TrafficLight: # Main Traffic Light code
         self.state: str = "RED" # Start as RED (Stop)
 
         self.queued: bool = False # Start unqueued for peds
+        
+    def panic(self): # If error (excpetion) recieved
+        self.amber.off() # Disable all lights except RED
+        self.green.off()
+        self.ped_light.off()
+        
+        try:
+            while True: # Blinking Red Loop: Singal to treat as all-way stop sign.
+                self.red.toggle()
+                time.sleep(0.5)
+        except KeyboardInterrupt: # Interrupt to exit.
+            self.red.off()
+            print("\nExiting...")
+            return # Return without statement to return None (null)
 
     async def ped(self) -> None: # Pedestrial Request
         while True:
-            if self.button.is_pressed: # type: ignore # When pedestrian requests crossing
+            if self.button.is_pressed and not self.queued: # type: ignore # When pedestrian requests crossing and not already queued
                 self.queued = True # Queue pedestrial
+                print("PED: Queued.")
             await asy.sleep(0.1) # Wait 0.1 seconds (100 milliseconds) to avoid lag
             
     async def ped_update(self) -> None: # Update pedestrian light when light is RED
         if self.queued:
+            print("PED: Allowing cross...")
             self.ped_light.on() # Solid on, 30 seconds on start
             await asy.sleep(10) # Wait 10 seconds, 20 seconds after await
             for _ in range(1, 30): # Ever 0.5 seconds toggle on off, leave 5 seconds off before light is GREEN
@@ -38,20 +55,24 @@ class TrafficLight: # Main Traffic Light code
                 await asy.sleep(0.5)
                 self.ped_light.on()
                 await asy.sleep(0.5)
+            self.ped_light.off()
 
-    def check_state(self) -> None: # Check Traffic Light state
+    async def check_state(self) -> None: # Check Traffic Light state
         match self.state:
             case "RED": # Stop
-                if self.queued: # Allow crossing if queued
-                    _ = self.ped_update()
+                print("TRAFFIC: RED light.")
                 self.red.on()
                 self.amber.off()
                 self.green.off()
+                if self.queued: # Allow crossing if queued
+                    await self.ped_update()
             case "AMBER": # Prepare to stop
+                print("TRAFFIC: AMBER light.")
                 self.red.off()
                 self.amber.on()
                 self.green.off()
             case "GREEN": # Proceed when safe
+                print("TRAFFIC: GREEN light.")
                 self.red.off()
                 self.amber.off()
                 self.green.on()
@@ -60,29 +81,34 @@ class TrafficLight: # Main Traffic Light code
 
     async def cycle(self) -> None: # Traffic Light cycle
         while True:
-            self.check_state() # Check state after changes
+            await self.check_state() # Check state after changes
             
             match self.state:
                 case "RED": # If RED, wait 30 seconds, change to GREEN
-                    await asy.sleep(30)
+                    await asy.sleep(5)
                     self.state = "GREEN"
                 case "AMBER": # If AMBER, wait 5 seconds, change to RED
-                    await asy.sleep(5)
+                    await asy.sleep(3)
                     self.state = "RED"
                 case "GREEN":
-                    await asy.sleep(25) # If GREEN, wait 5 seconds, change to AMBER
+                    await asy.sleep(5) # If GREEN, wait 5 seconds, change to AMBER
                     self.state = "AMBER"
                 case _: # Unused
                     pass
                 
     async def main(self) -> None: # Main class entry
-        await asy.gather(self.cycle(), self.ped(), self.ped_update()) # Initialize async functions.
+        print("Starting...")
+        await asy.gather(self.cycle(), self.ped()) # Initialize async functions.
                 
 if __name__ == "__main__": # Main code entry
     tl = TrafficLight() # Instance TrafficLight
     try:
         asy.run(tl.main()) # Start TrafficLight
     except KeyboardInterrupt:
-        exit(0) # If recieve KeyboardInterrupt (CTRL+C) from testing, exit normally.
+        print("Stopping...")
+        tl.panic()
+        exit(1) # If recieve KeyboardInterrupt (CTRL+C) from testing, exit normally.
     except Exception as e:
+        print("Panic: ", e)
+        tl.panic()
         exit(1) # If for some reason TrafficLight.main() does not start, exit with an error code. It should never reach this point.
