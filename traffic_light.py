@@ -85,13 +85,16 @@ class TrafficLight: # Main Traffic Light code
             
             match self.state:
                 case "RED": # If RED, wait 30 seconds, change to GREEN
-                    await asy.sleep(5)
+                    if self.queued:
+                        await asy.sleep(5)
+                    else:
+                        await asy.sleep(30)
                     self.state = "GREEN"
                 case "AMBER": # If AMBER, wait 5 seconds, change to RED
-                    await asy.sleep(3)
+                    await asy.sleep(5)
                     self.state = "RED"
                 case "GREEN":
-                    await asy.sleep(5) # If GREEN, wait 5 seconds, change to AMBER
+                    await asy.sleep(25) # If GREEN, wait 25 seconds, change to AMBER
                     self.state = "AMBER"
                 case _: # Unused
                     pass
