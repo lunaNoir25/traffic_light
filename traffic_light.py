@@ -56,6 +56,7 @@ class TrafficLight: # Main Traffic Light code
                 self.ped_light.on()
                 await asy.sleep(0.5)
             self.ped_light.off()
+            self.queued = False
 
     async def check_state(self) -> None: # Check Traffic Light state
         match self.state:
